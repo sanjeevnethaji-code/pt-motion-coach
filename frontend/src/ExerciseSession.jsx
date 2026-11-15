@@ -1,7 +1,8 @@
 import { useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { buildSessionPayload } from './sessionSummary'
 import { COACHING, measureExercise, advanceCoach, positionProgress } from './coaching'
 
-export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onCoachUpdate, actionsRef }) {
+export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onCoachUpdate, actionsRef, onReview }) {
   const config = COACHING[exercise.id]
   const [side, setSide] = useState('right')
   const [part, setPart] = useState('elbow')
@@ -27,6 +28,8 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   const lastPoseRef = useRef(null)
   const samplesRef = useRef([])
   const lastSpokenRef = useRef('')
+  const interruptionsRef = useRef(0)
+  const wasVisibleRef = useRef(null)
 
   function say(text) {
     if (!voice || !window.speechSynthesis) return
@@ -49,6 +52,8 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       const dt = lastTickRef.current === null ? 0 : Math.min(0.2, (now - lastTickRef.current) / 1000)
       lastTickRef.current = now
       if (!running) return
+      if (wasVisibleRef.current === true && !next.visible) interruptionsRef.current += 1
+      wasVisibleRef.current = next.visible
       if (!next.visible) {
         coachRef.current = kind === 'auto' ? advanceCoach(coachRef.current, null, now, first, second, hold * 1000) : { ...coachRef.current, phase: 'start', since: null }
         setCoach(coachRef.current)
@@ -165,6 +170,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   function reset(clearCalibration = false) {
     setRunning(false); setFinished(false); setSeconds(0); setHeldSeconds(0); setMessage('')
     elapsedRef.current = 0; heldRef.current = 0; lastTickRef.current = null
+    interruptionsRef.current = 0; wasVisibleRef.current = null
     coachRef.current = { phase: 'start', since: null, reps: 0 }
     setCoach(coachRef.current)
     window.speechSynthesis?.cancel()
@@ -189,15 +195,25 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   function startCoaching() {
     if (!canStart || finished) return
     lastTickRef.current = null
+    wasVisibleRef.current = null
     lastPoseRef.current = null
     lastSpokenRef.current = ''
     setRunning(true)
+  }
+  function reviewResults() {
+    setRunning(false)
+    window.speechSynthesis?.cancel()
+    onReview?.({
+      session: buildSessionPayload(exercise, kind, part, coachRef.current.reps, goal, elapsedRef.current, interruptionsRef.current),
+      side, timeGoal: duration,
+      completedGoal: kind === 'timed' ? heldRef.current >= duration : coachRef.current.reps >= goal,
+    })
   }
   useImperativeHandle(actionsRef, () => ({
     recordStart: () => capture('first'), recordTarget: () => capture('second'),
     start: startCoaching,
     pause: () => { setRunning(false); coachRef.current = { ...coachRef.current, phase: 'start', since: null, lostAt: null }; setCoach(coachRef.current); window.speechSynthesis?.cancel() },
-    reset: () => reset(),
+    reset: () => reset(), review: reviewResults,
   }))
 
   return <section id="exercise-coach" className="exercise-session" aria-label={`${exercise.name} coach`}>
@@ -246,7 +262,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
         coachRef.current = next; setCoach(next)
         if (next.reps >= goal) { setRunning(false); setFinished(true) }
       }}>{coach.phase === 'hold' ? 'Hold…' : coach.phase === 'back' ? 'I returned — complete rep' : 'I reached my approved position'}</button>}
-      <button className="secondary" onClick={() => { setRunning(false); setFinished(true) }}>Finish early</button>
+      <button className="primary" onClick={reviewResults}>Finish &amp; Review Results</button>
       <button className="secondary" onClick={() => reset()}>Reset Session</button>
     </div>
     <p className="privacy">Tracking loss pauses timing and cancels an unfinished rep. Results stay on this screen only.</p>

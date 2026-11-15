@@ -7,6 +7,7 @@ import { ARM_POINTS } from './movement'
 import { drawTargetGuide } from './targetGuide'
 import ExerciseSession from './ExerciseSession'
 import ExercisePreview from './ExercisePreview'
+import SessionResults from './SessionResults'
 import './App.css'
 
 const cameraError = (error) => {
@@ -31,6 +32,7 @@ function App() {
     setLiveCoach(value)
   }, [])
   const [screen, setScreen] = useState('welcome')
+  const [sessionResult, setSessionResult] = useState(null)
   const [surgeryId, setSurgeryId] = useState(null)
   const [exerciseId, setExerciseId] = useState(null)
   const exerciseRef = useRef(null)
@@ -236,6 +238,12 @@ function App() {
     setScreen(next)
     window.scrollTo(0, 0)
   }
+  function reviewSession(result) {
+    stopCamera()
+    setSessionResult(result)
+    setScreen('results')
+    window.scrollTo(0, 0)
+  }
   const activeCoach = liveCoach?.exerciseId === exerciseId ? liveCoach : null
   const shortMoves = {
     'heel-slides': ['Slide heel toward you', 'Slide heel away'],
@@ -263,13 +271,14 @@ function App() {
     welcome: 'Welcome to PT Form Coach', surgery: 'Choose your surgery',
     exercise: 'Choose your exercise', ready: 'Ready to begin?',
     camera: selectedExercise?.name ?? 'Shoulder tracking demo',
+    results: 'Your session results',
   }
 
   return (
     <main className={`app ${screen === 'camera' ? 'camera-screen' : ''}`}>
       <div className="brand-row"><span className="brand-mark">PT</span> PT Form Coach</div>
       {screen !== 'welcome' && <nav className="screen-nav" aria-label="Session navigation">
-        <button className="back-button" onClick={() => navigate(screen === 'surgery' ? 'welcome' : screen === 'exercise' ? 'surgery' : screen === 'ready' ? (shoulderDemo ? 'surgery' : 'exercise') : 'ready')}>← Back</button>
+        <button className="back-button" onClick={() => navigate(screen === 'surgery' ? 'welcome' : screen === 'exercise' ? 'surgery' : screen === 'ready' ? (shoulderDemo ? 'surgery' : 'exercise') : screen === 'results' ? 'exercise' : 'ready')}>← Back</button>
         <span>{surgery?.name ?? (shoulderDemo ? 'General demo' : 'Your session')}{selectedExercise ? ` / ${selectedExercise.name}` : ''}</span>
       </nav>}
       <header><p className="eyebrow">YOUR MOVEMENT SPACE</p><h1>{titles[screen]}</h1></header>
@@ -317,6 +326,7 @@ function App() {
         <p className="privacy">Your camera stays off until you choose to open it. No microphone is requested.</p>
       </section>}
 
+      {screen === 'results' && sessionResult && <SessionResults result={sessionResult} onNext={() => navigate('exercise')} />}
       <section hidden={screen !== 'camera'} className="camera-card" aria-label="Webcam preview">
         <div className="camera-heading">
           <h2>Camera preview</h2>
@@ -384,6 +394,7 @@ function App() {
                   <button className="secondary" disabled={!activeCoach.visible || !activeCoach.firstRecorded} onClick={() => coachActionsRef.current?.recordTarget()}>2. Record target {activeCoach.secondRecorded ? '✓' : ''}</button>
                 </>}
                 <button className="primary start-counting-button" disabled={!activeCoach.visible || activeCoach.finished || (activeCoach.automatic && !activeCoach.secondRecorded)} onClick={() => activeCoach.running ? coachActionsRef.current?.pause() : coachActionsRef.current?.start()}>{activeCoach.running ? 'PAUSE' : 'START COUNTING'}</button>
+                <button className="primary" onClick={() => coachActionsRef.current?.review()}>Finish &amp; Review Results</button>
                 <button className="secondary" onClick={() => coachActionsRef.current?.reset()}>Reset reps</button>
               </div>
               <div className="sidebar-counting-check"><strong>Counting check</strong><p>{activeCoach.blocker}</p></div>
@@ -403,7 +414,7 @@ function App() {
         </div>
         {error && <p className="error" role="alert">{error}</p>}
         <p className="privacy">Video only. Your microphone is off. Body tracking runs on this device. Video is not recorded or uploaded.</p>
-        {screen === 'camera' && selectedExercise && <details className="advanced-session"><summary>Exercise settings, voice, and manual confirmation</summary><ExerciseSession key={selectedExercise.id} exercise={selectedExercise} poseSampleRef={poseSampleRef} cameraOn={status === 'on'} onCoachUpdate={updateCoach} actionsRef={coachActionsRef} /></details>}
+        {screen === 'camera' && selectedExercise && <details className="advanced-session"><summary>Exercise settings, voice, and manual confirmation</summary><ExerciseSession key={selectedExercise.id} exercise={selectedExercise} poseSampleRef={poseSampleRef} cameraOn={status === 'on'} onCoachUpdate={updateCoach} actionsRef={coachActionsRef} onReview={reviewSession} /></details>}
         {selectedExercise && <button className="primary next-button" onClick={() => navigate('exercise')}>Next exercise →</button>}
       </section>
     </main>
