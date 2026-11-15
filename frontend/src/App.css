@@ -262,3 +262,14 @@ select:focus-visible, input:focus-visible { outline: 3px solid #267eaa; outline-
 .summary-output p { font-size: 18px; line-height: 1.65; }
 .summary-output .privacy { font-size: 14px; border-top: 1px solid #dce7e3; padding-top: 16px; }
 @media(max-width: 600px) { .aws-summary-card, .summary-output { padding: 18px; } }
+
+.review-evidence, .review-feedback, .review-history { border-top: 1px solid #dce7e3; padding-top: 24px; margin-top: 28px; line-height: 1.6; }
+.session-results h3 { font-size: 25px; }
+.table-scroll { overflow-x: auto; }
+.table-scroll table { width: 100%; border-collapse: collapse; text-align: left; font-size: 17px; }
+.table-scroll th, .table-scroll td { padding: 14px; border-bottom: 1px solid #dce7e3; white-space: nowrap; }
+.table-scroll th { background: #edf5f1; }
+.review-history > label { display: flex; flex-direction: column; gap: 8px; font-weight: 650; }
+.review-history input:not([type=checkbox]) { max-width: 400px; border: 1px solid #bfcfc9; border-radius: 10px; padding: 12px; font: inherit; }
+.review-history .comparison-confirm { display: flex; flex-direction: row; align-items: start; margin: 16px 0; }
+.comparison-confirm input { margin-top: 7px; }

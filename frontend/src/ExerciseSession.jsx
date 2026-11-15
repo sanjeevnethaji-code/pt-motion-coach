@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createRepRecorder, recordRepFrame } from './reviewMetrics'
 import { buildSessionPayload } from './sessionSummary'
 import { COACHING, measureExercise, advanceCoach, positionProgress } from './coaching'
 
@@ -30,6 +31,9 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   const lastSpokenRef = useRef('')
   const interruptionsRef = useRef(0)
   const wasVisibleRef = useRef(null)
+  const repRecorderRef = useRef(createRepRecorder())
+  const observedRef = useRef(0)
+  const visibleTimeRef = useRef(0)
 
   function say(text) {
     if (!voice || !window.speechSynthesis) return
@@ -52,18 +56,24 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       const dt = lastTickRef.current === null ? 0 : Math.min(0.2, (now - lastTickRef.current) / 1000)
       lastTickRef.current = now
       if (!running) return
+      observedRef.current += dt
+      if (next.visible) visibleTimeRef.current += dt
       if (wasVisibleRef.current === true && !next.visible) interruptionsRef.current += 1
       wasVisibleRef.current = next.visible
       if (!next.visible) {
+        const before = coachRef.current
         coachRef.current = kind === 'auto' ? advanceCoach(coachRef.current, null, now, first, second, hold * 1000) : { ...coachRef.current, phase: 'start', since: null }
+        if (kind === 'auto') recordRepFrame(repRecorderRef.current, before, coachRef.current, null, now)
         setCoach(coachRef.current)
         return
       }
       elapsedRef.current += dt
       setSeconds(Math.floor(elapsedRef.current))
       if (kind === 'auto' && sample.time !== lastPoseRef.current) {
+        const before = coachRef.current
         coachRef.current = advanceCoach(coachRef.current, next.value, now, first, second, hold * 1000)
         setCoach(coachRef.current)
+        recordRepFrame(repRecorderRef.current, before, coachRef.current, next.value, now)
         lastPoseRef.current = sample.time
         if (coachRef.current.reps >= goal) { setRunning(false); setFinished(true) }
       } else if (kind === 'guided' && coachRef.current.phase === 'hold') {
@@ -171,6 +181,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     setRunning(false); setFinished(false); setSeconds(0); setHeldSeconds(0); setMessage('')
     elapsedRef.current = 0; heldRef.current = 0; lastTickRef.current = null
     interruptionsRef.current = 0; wasVisibleRef.current = null
+    repRecorderRef.current = createRepRecorder(); observedRef.current = 0; visibleTimeRef.current = 0
     coachRef.current = { phase: 'start', since: null, reps: 0 }
     setCoach(coachRef.current)
     window.speechSynthesis?.cancel()
@@ -204,7 +215,17 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     setRunning(false)
     window.speechSynthesis?.cancel()
     onReview?.({
-      session: buildSessionPayload(exercise, kind, part, coachRef.current.reps, goal, elapsedRef.current, interruptionsRef.current),
+      session: {
+        ...buildSessionPayload(exercise, kind, part, coachRef.current.reps, goal, elapsedRef.current, interruptionsRef.current),
+        exercise_id: exercise.id, side, movement_part: exercise.id === 'elbow-wrist' ? part : 'primary',
+        rep_details: kind === 'auto' ? repRecorderRef.current.rows : [],
+        tracking_observed_seconds: Math.round(observedRef.current * 10) / 10,
+        tracking_visible_seconds: Math.round(visibleTimeRef.current * 10) / 10,
+        calibration_start: kind === 'auto' ? first : null,
+        calibration_target: kind === 'auto' ? second : null,
+        hold_goal_seconds: kind === 'timed' ? null : hold,
+        time_goal_seconds: kind === 'timed' ? duration : null,
+      },
       side, timeGoal: duration,
       completedGoal: kind === 'timed' ? heldRef.current >= duration : coachRef.current.reps >= goal,
     })
