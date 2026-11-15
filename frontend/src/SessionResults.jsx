@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { requestSessionSummary } from './sessionSummary'
+import { repQuality } from './measurementQuality'
 import { reviewEvidence, loadReviewHistory, saveReviewHistory, previousComparable } from './reviewMetrics'
 
 const REASONS = {
@@ -69,7 +70,7 @@ export default function SessionResults({ result, onNext }) {
       `Reps: ${session.completed_reps}/${session.planned_reps}`, `Tracked active time: ${session.duration_seconds}s`,
       `Tracking interruptions: ${session.tracking_interruptions}`, `Visible while running: ${evidence.visibility_percent ?? 'not measured'}%`,
       `Method: ${session.measurement_method}`, `Self-reported end reason: ${REASONS[reason]}`, '',
-      ...session.rep_details.map((row) => `Rep ${row.rep}: observed excursion ${row.excursion_degrees} deg; measured hold ${row.hold_seconds ?? 'not recorded'}s; cycle ${row.cycle_seconds}s`),
+      ...session.rep_details.map((row) => `Rep ${row.rep}: observed excursion ${row.excursion_degrees} deg; measured hold ${row.hold_seconds ?? 'not recorded'}s; cycle ${row.cycle_seconds}s; quality: ${repQuality(row, session).join('; ') || 'no detected flags'}`),
       '', summary ? 'AI-generated interpretation:\n' + summary : 'No AI interpretation generated.',
       '', 'Experimental estimates. No diagnosis, healing assessment, or treatment recommendation.']
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }))
@@ -83,15 +84,21 @@ export default function SessionResults({ result, onNext }) {
     <div className="result-grid">
       {!timed && <div><span>{session.measurement_method === 'manual confirmation' ? 'Confirmed reps' : 'Counted reps'}</span><strong>{session.completed_reps}<small> / {session.planned_reps}</small></strong></div>}
       <div><span>Tracked active time</span><strong>{session.duration_seconds}<small> sec</small></strong></div>
-      <div><span>Visible while running · approximate</span><strong>{evidence.visibility_percent === null ? '—' : evidence.visibility_percent + '%'}</strong></div>
+      <div><span>Usable tracking while running · approximate</span><strong>{evidence.visibility_percent === null ? '—' : evidence.visibility_percent + '%'}</strong></div>
       <div><span>Tracking interruptions</span><strong>{session.tracking_interruptions}</strong></div>
     </div>
+    <section className="review-quality" aria-label="Measurement quality">
+      <h3>Check the measurements first</h3>
+      <p><strong>{evidence.included_reps}</strong> completed rep measurements have no detected tracking flags. <strong>{evidence.excluded_reps}</strong> have flags and are excluded from excursion statistics. This check is not proof of clinical accuracy.</p>
+      {evidence.warnings.length > 0 ? <ul>{evidence.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : <p>No automatic quality flags were detected. Camera perspective can still affect the result.</p>}
+      <p>Usable tracking means selected landmarks were visible and passed the available tracking checks. It does not prove that the angles or posture were correct.</p>
+    </section>
     <section className="review-evidence">
       <h3>What was actually measured</h3>
       {evidence.measured_reps > 0 ? <>
-        <p>{evidence.measured_reps} completed reps have per-rep measurements. Observed joint excursion ranged from <strong>{evidence.min_excursion}° to {evidence.max_excursion}°</strong>. This is change in the camera-estimated joint angle, not a clinical range-of-motion test.</p>
-        <div className="table-scroll"><table><thead><tr><th>Rep</th><th>Min → max angle</th><th>Excursion</th><th>Completed hold</th><th>Cycle time</th></tr></thead><tbody>
-          {session.rep_details.map((row) => <tr key={row.rep}><td>{row.rep}</td><td>{row.min_angle}° → {row.max_angle}°</td><td>{row.excursion_degrees}°</td><td>{row.hold_seconds === null ? 'Not recorded' : row.hold_seconds + 's'}</td><td>{row.cycle_seconds}s</td></tr>)}
+        <p>{evidence.measured_reps} completed reps have per-rep measurements. {evidence.included_reps > 0 ? <>Among reps without detected tracking flags, observed excursion ranged from <strong>{evidence.min_excursion}° to {evidence.max_excursion}°</strong>.</> : 'All measured reps are flagged; no excursion statistics or comparisons will be interpreted.'} This is change between stable camera-estimated positions, not a clinical range-of-motion test.</p>
+        <div className="table-scroll"><table><thead><tr><th>Rep</th><th>Start → held angle</th><th>Excursion</th><th>Completed hold</th><th>Cycle time</th><th>Measurement check</th></tr></thead><tbody>
+          {session.rep_details.map((row) => <tr key={row.rep}><td>{row.rep}</td><td>{row.start_angle ?? '—'}° → {row.held_angle ?? '—'}°</td><td>{row.excursion_degrees}°</td><td>{row.hold_seconds === null ? 'Not recorded' : row.hold_seconds + 's'}</td><td>{row.cycle_seconds}s</td><td>{repQuality(row, session).length ? <span className="quality-flag">Flagged — excluded</span> : <span>No detected flags</span>}</td></tr>)}
         </tbody></table></div>
         <p className="privacy">Cycle time can include brief tracking gaps. Position holds must finish while tracked. Incomplete reps are not included in this table.</p>
       </> : <p>{timed ? 'Visibility-assisted timing only. The app did not measure movement quality.' : session.measurement_method === 'manual confirmation' ? 'Reps were confirmed manually. Joint excursion and hold measurements are not available.' : 'No completed rep measurements were recorded. The review will state that evidence is missing.'}</p>}

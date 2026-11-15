@@ -121,7 +121,7 @@ function App() {
               ? 'Show your selected hip, shoulder, and elbow' : 'Tracking ready')
             if (landmarks) {
               const visible = (point) => (point.visibility ?? 1) >= 0.5
-              context.strokeStyle = '#72f3c4'
+              context.strokeStyle = '#b5d2d9'
               context.lineWidth = Math.max(2, width / 300)
               for (const { start, end } of PoseLandmarker.POSE_CONNECTIONS) {
                 const a = landmarks[start]
@@ -140,7 +140,7 @@ function App() {
                 context.fill()
                 context.strokeStyle = '#146f5b'
                 context.stroke()
-                context.strokeStyle = '#72f3c4'
+                context.strokeStyle = '#b5d2d9'
               }
               if (demoActive && currentAngle !== null) {
                 const demoTarget = movementRef.current.phase === 'lower' ? 15 : settings.target
@@ -150,7 +150,7 @@ function App() {
               } else {
                 const live = liveCoachRef.current
                 const config = COACHING[exerciseRef.current]
-                if (live?.exerciseId === exerciseRef.current && live.automatic && config && live.target !== null && live.phase !== 'complete') {
+                if (live?.exerciseId === exerciseRef.current && live.automatic && live.visible && config && live.target !== null && live.phase !== 'complete') {
                   const geometricAngle = config.bend ? 180 - live.target : live.target
                   drawTargetGuide(context, landmarks, config.points[live.side], geometricAngle, width, height, live.matching)
                 }
@@ -257,7 +257,7 @@ function App() {
   if (activeCoach) {
     const moves = shortMoves[exerciseId]
     bigCue = activeCoach.finished ? 'Set finished ✓'
-      : !activeCoach.visible ? 'Move into view'
+      : !activeCoach.visible ? activeCoach.quality === 'rejected' ? 'Check camera view' : 'Move into view'
       : activeCoach.automatic && !activeCoach.firstRecorded ? 'Record starting position'
       : activeCoach.automatic && !activeCoach.secondRecorded ? 'Record movement target'
       : !activeCoach.running ? 'Press START COUNTING'
@@ -387,7 +387,7 @@ function App() {
           <aside className="camera-sidebar" aria-label="Exercise instructions and controls">
             <h2>{selectedExercise?.name ?? 'Shoulder demo'}</h2>
             {activeCoach && <>
-              <p className="sidebar-side">{activeCoach.side === 'left' ? 'LEFT' : 'RIGHT'} SIDE · {activeCoach.running ? 'COUNTING ON' : 'COUNTING PAUSED'}</p>
+              <p className="sidebar-side">{activeCoach.side === 'left' ? 'LEFT' : 'RIGHT'} SIDE · {activeCoach.manualConfirmation ? 'MANUAL CONFIRMATION · ' : ''}{activeCoach.running ? 'COUNTING ON' : 'COUNTING PAUSED'}</p>
               <div className="sidebar-controls">
                 {activeCoach.automatic && !activeCoach.running && <>
                   <button className="secondary" disabled={!activeCoach.visible} onClick={() => coachActionsRef.current?.recordStart()}>1. Record start {activeCoach.firstRecorded ? '✓' : ''}</button>
@@ -396,6 +396,9 @@ function App() {
                 <button className="primary start-counting-button" disabled={!activeCoach.visible || activeCoach.finished || (activeCoach.automatic && !activeCoach.secondRecorded)} onClick={() => activeCoach.running ? coachActionsRef.current?.pause() : coachActionsRef.current?.start()}>{activeCoach.running ? 'PAUSE' : 'START COUNTING'}</button>
                 <button className="primary" onClick={() => coachActionsRef.current?.review()}>Finish &amp; Review Results</button>
                 <button className="secondary" onClick={() => coachActionsRef.current?.reset()}>Reset reps</button>
+                {activeCoach.automatic && <button className="secondary" onClick={() => coachActionsRef.current?.recalibrate()}>Recalibrate camera</button>}
+                {activeCoach.automatic && activeCoach.manualAvailable && <button className="secondary" onClick={() => coachActionsRef.current?.useManual()}>Use guided manual logging</button>}
+                {activeCoach.manualConfirmation && <button className="primary" disabled={!activeCoach.running || !activeCoach.visible || activeCoach.phase === 'hold'} onClick={() => coachActionsRef.current?.confirm()}>{activeCoach.phase === 'hold' ? 'Hold…' : activeCoach.phase === 'back' ? 'Confirm return · count rep' : 'Confirm approved position'}</button>}
               </div>
               <div className="sidebar-counting-check"><strong>Counting check</strong><p>{activeCoach.blocker}</p></div>
               <details className="sidebar-details" open><summary>How to move</summary><ol>{activeCoach.steps?.map((step) => <li key={step}>{step}</li>)}</ol></details>

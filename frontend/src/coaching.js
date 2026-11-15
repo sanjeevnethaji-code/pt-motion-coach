@@ -74,9 +74,13 @@ export function measureExercise(landmarks, config, side, width, height) {
   const u = [(a.x - vertex.x) * width, (a.y - vertex.y) * height]
   const v = [(c.x - vertex.x) * width, (c.y - vertex.y) * height]
   const denominator = Math.hypot(...u) * Math.hypot(...v)
+  const lengths = [Math.hypot(...u), Math.hypot(...v)]
+  if (lengths.some((length) => length < Math.max(12, width * 0.018))) return { visible: false, value: null, reason: 'The limb is too small or foreshortened in this view. Adjust the camera for a clear side view of all three joints.' }
+  if (Math.hypot((a.x - c.x) * width, (a.y - c.y) * height) < Math.max(10, Math.min(...lengths) * 0.15)) return { visible: false, value: null, reason: 'The outer joints overlap in this view, making the angle ambiguous. Use the demonstrated side view.' }
   if (denominator < 1) return { visible: false, value: null, reason: 'The selected joints overlap in this camera view. Use the side view shown in the setup.' }
   const angle = Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / denominator))) * 180 / Math.PI
-  return { visible: true, value: config.bend ? 180 - angle : angle }
+  if (config.bend && angle < 5) return { visible: false, value: null, quality: 'rejected', reason: 'The limb segments nearly overlap in this 2D view. That angle is ambiguous; use a clear side view or guided manual logging.' }
+  return { visible: true, value: config.bend ? 180 - angle : angle, lengths }
 }
 
 export function positionProgress(value, first, second) {

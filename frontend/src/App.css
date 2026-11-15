@@ -273,3 +273,7 @@ select:focus-visible, input:focus-visible { outline: 3px solid #267eaa; outline-
 .review-history input:not([type=checkbox]) { max-width: 400px; border: 1px solid #bfcfc9; border-radius: 10px; padding: 12px; font: inherit; }
 .review-history .comparison-confirm { display: flex; flex-direction: row; align-items: start; margin: 16px 0; }
 .comparison-confirm input { margin-top: 7px; }
+
+.review-quality { margin-top: 24px; padding: 22px; border: 1px solid #d7ba73; border-radius: 14px; background: #fff8e9; line-height: 1.65; }
+.review-quality h3 { margin-top: 0; }
+.quality-flag { display: inline-block; padding: 5px 8px; background: #fff0d0; color: #704716; border-radius: 6px; }

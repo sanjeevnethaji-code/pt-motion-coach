@@ -14,12 +14,12 @@ export function buildSessionPayload(exercise, kind, part, reps, goal, seconds, i
 export async function requestSessionSummary(session, signal, fetcher = fetch) {
   const response = await fetcher(SUMMARY_ENDPOINT, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...session, review_version: 2 }), signal,
+    body: JSON.stringify({ ...session, review_version: 3 }), signal,
   })
   let data
   try { data = await response.json() } catch { throw new Error('The summary service returned an unreadable response. Your results are still shown below.') }
   if (!response.ok) throw new Error(response.status === 403 ? 'AWS denied access to the summary URL.' : data.error || 'The summary service is unavailable. Please try again.')
   if (typeof data.summary !== 'string' || !data.summary.trim()) throw new Error('The service returned no summary. Please try again.')
-  if (data.review_version !== 2) throw new Error('The AWS function still runs the earlier basic summary. Update lambda_function.py with the therapist-review version, Deploy it, then try again.')
+  if (data.review_version !== 3) throw new Error('The AWS function still runs the earlier review code. Update lambda_function.py with the measurement-quality version, Deploy it, then try again.')
   return data
 }

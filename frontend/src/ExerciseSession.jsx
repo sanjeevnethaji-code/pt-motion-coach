@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { QUALITY_VERSION, newSignalFilter, filterMeasurement } from './measurementQuality'
 import { createRepRecorder, recordRepFrame } from './reviewMetrics'
 import { buildSessionPayload } from './sessionSummary'
 import { COACHING, measureExercise, advanceCoach, positionProgress } from './coaching'
@@ -7,7 +8,8 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   const config = COACHING[exercise.id]
   const [side, setSide] = useState('right')
   const [part, setPart] = useState('elbow')
-  const kind = part === 'wrist' ? 'guided' : config.kind
+  const [manualMode, setManualMode] = useState(false)
+  const kind = part === 'wrist' || manualMode ? 'guided' : config.kind
   const [voice, setVoice] = useState(true)
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -34,6 +36,11 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
   const repRecorderRef = useRef(createRepRecorder())
   const observedRef = useRef(0)
   const visibleTimeRef = useRef(0)
+  const signalRef = useRef(newSignalFilter())
+  const filterSampleRef = useRef(null)
+  const filteredReadingRef = useRef(null)
+  const calibrationRef = useRef(null)
+  const rejectedRef = useRef(0)
 
   function say(text) {
     if (!voice || !window.speechSynthesis) return
@@ -49,7 +56,16 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       setClock(now)
       const sample = poseSampleRef.current
       const fresh = cameraOn && sample && now - sample.time < 600 && !document.hidden
-      const next = fresh ? measureExercise(sample.landmarks, config, side, sample.width, sample.height) : { visible: false, value: null, reason: cameraOn ? 'Waiting for a fresh tracking frame. Keep the app visible.' : 'Start the camera first.' }
+      const rawReading = fresh ? measureExercise(sample.landmarks, kind === 'guided' ? { ...config, metric: null } : config, side, sample.width, sample.height) : { visible: false, value: null, reason: cameraOn ? 'Waiting for a fresh tracking frame. Keep the app visible.' : 'Start the camera first.' }
+      let next = rawReading
+      if (kind === 'auto') {
+        if (!fresh || sample.time !== filterSampleRef.current) {
+          next = filterMeasurement(signalRef.current, rawReading, now, calibrationRef.current)
+          filteredReadingRef.current = next
+          filterSampleRef.current = fresh ? sample.time : null
+          if (running && next.quality === 'rejected') rejectedRef.current += 1
+        } else next = filteredReadingRef.current ?? rawReading
+      }
       setReading(next)
       if (next.value !== null) samplesRef.current = [...samplesRef.current.slice(-9), next.value]
       else samplesRef.current = []
@@ -63,7 +79,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       if (!next.visible) {
         const before = coachRef.current
         coachRef.current = kind === 'auto' ? advanceCoach(coachRef.current, null, now, first, second, hold * 1000) : { ...coachRef.current, phase: 'start', since: null }
-        if (kind === 'auto') recordRepFrame(repRecorderRef.current, before, coachRef.current, null, now)
+        if (kind === 'auto') recordRepFrame(repRecorderRef.current, before, coachRef.current, null, now, next.quality)
         setCoach(coachRef.current)
         return
       }
@@ -150,8 +166,9 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     onCoachUpdate?.({
       exerciseId: exercise.id, name: exercise.name, cue, feedback, matching,
       steps: cameraSteps, side, setup: config.setup,
-      metric: part === 'wrist' ? null : config.metric,
-      angle: reading.value, target: kind === 'auto' ? desiredPosition : null,
+      metric: kind === 'guided' ? null : config.metric,
+      manualConfirmation: kind === 'guided', manualAvailable: config.kind === 'auto' && part !== 'wrist',
+      quality: reading.quality, angle: reading.value, target: kind === 'auto' ? desiredPosition : null,
       reps: coach.reps, goal, holdRemaining,
       timer: kind === 'timed' ? `${heldSeconds} / ${duration}s` : null,
       automatic: kind === 'auto',
@@ -161,7 +178,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       progress: progress === null ? null : Math.round(Math.max(0, Math.min(1, progress)) * 100),
     })
   }, [onCoachUpdate, exercise.id, exercise.name, cue, feedback, matching, part, config.metric,
-    reading.value, kind, desiredPosition, coach.reps, goal, holdRemaining, heldSeconds, duration, cameraSteps, side, config.setup, finished, running, reading.visible, coach.phase, first, second, progress, message, blocker, postureReminder])
+    reading.value, reading.quality, kind, desiredPosition, coach.reps, goal, holdRemaining, heldSeconds, duration, cameraSteps, side, config.setup, finished, running, reading.visible, coach.phase, first, second, progress, message, blocker, postureReminder, config.kind])
 
 
   useEffect(() => {
@@ -182,10 +199,12 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     elapsedRef.current = 0; heldRef.current = 0; lastTickRef.current = null
     interruptionsRef.current = 0; wasVisibleRef.current = null
     repRecorderRef.current = createRepRecorder(); observedRef.current = 0; visibleTimeRef.current = 0
+    rejectedRef.current = 0
+    signalRef.current = newSignalFilter(); filterSampleRef.current = null; filteredReadingRef.current = null
     coachRef.current = { phase: 'start', since: null, reps: 0 }
     setCoach(coachRef.current)
     window.speechSynthesis?.cancel()
-    if (clearCalibration) { setFirst(null); setSecond(null); samplesRef.current = [] }
+    if (clearCalibration) { setFirst(null); setSecond(null); samplesRef.current = []; calibrationRef.current = null }
   }
 
   function capture(which) {
@@ -194,11 +213,21 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       setMessage('Keep the selected joints visible and still for a moment, then try again.'); return
     }
     const value = values.reduce((a, b) => a + b, 0) / values.length
-    reset(false)
     if (which === 'second' && Math.abs(value - first) < 8) {
       setMessage('The camera cannot distinguish these two positions. Do not increase your range for the app; use the guided exercise options or ask for help.'); return
     }
-    if (which === 'first') { setFirst(value); setSecond(null) } else setSecond(value)
+    if (which === 'second' && config.bend && value <= first) {
+      setMessage('These reference positions are reversed for this movement. Record the starting position first, then the prescribed bent position. Do not increase your range for the app.')
+      return
+    }
+    reset(false)
+    if (which === 'first') {
+      setFirst(value); setSecond(null)
+      calibrationRef.current = { start: value, target: null, lengths: reading.lengths }
+    } else {
+      setSecond(value)
+      calibrationRef.current = { ...calibrationRef.current, target: value }
+    }
     setMessage('Position recorded. These are demo reference positions, not prescribed targets.')
   }
 
@@ -217,6 +246,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     onReview?.({
       session: {
         ...buildSessionPayload(exercise, kind, part, coachRef.current.reps, goal, elapsedRef.current, interruptionsRef.current),
+        quality_version: QUALITY_VERSION, rejected_angle_samples: rejectedRef.current,
         exercise_id: exercise.id, side, movement_part: exercise.id === 'elbow-wrist' ? part : 'primary',
         rep_details: kind === 'auto' ? repRecorderRef.current.rows : [],
         tracking_observed_seconds: Math.round(observedRef.current * 10) / 10,
@@ -230,11 +260,25 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       completedGoal: kind === 'timed' ? heldRef.current >= duration : coachRef.current.reps >= goal,
     })
   }
+  function confirmGuidedRep() {
+    if (kind !== 'guided' || !running || !reading.visible) return
+        if (coachRef.current.phase === 'hold') return
+        if (coachRef.current.phase !== 'back') {
+          coachRef.current = { ...coachRef.current, phase: 'hold', since: performance.now() }
+          setCoach(coachRef.current)
+          return
+        }
+        const next = { phase: 'start', since: null, reps: coachRef.current.reps + 1 }
+        coachRef.current = next; setCoach(next)
+        if (next.reps >= goal) { setRunning(false); setFinished(true) }
+  }
   useImperativeHandle(actionsRef, () => ({
     recordStart: () => capture('first'), recordTarget: () => capture('second'),
     start: startCoaching,
     pause: () => { setRunning(false); coachRef.current = { ...coachRef.current, phase: 'start', since: null, lostAt: null }; setCoach(coachRef.current); window.speechSynthesis?.cancel() },
-    reset: () => reset(), review: reviewResults,
+    reset: () => reset(), recalibrate: () => reset(true), review: reviewResults,
+    useManual: () => { if (config.kind === 'auto') { reset(true); setManualMode(true) } },
+    confirm: confirmGuidedRep,
   }))
 
   return <section id="exercise-coach" className="exercise-session" aria-label={`${exercise.name} coach`}>
@@ -247,6 +291,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
       <button className="secondary" aria-pressed={voice} onClick={() => { setVoice(!voice); window.speechSynthesis?.cancel() }}>Voice {voice ? 'On' : 'Off'}</button>
     </div>
     <div className="coach-settings">
+      {config.kind === 'auto' && part !== 'wrist' && <label>Counting mode<select disabled={running} value={manualMode ? 'manual' : 'automatic'} onChange={(e) => { reset(true); setManualMode(e.target.value === 'manual') }}><option value="automatic">Automatic · experimental camera</option><option value="manual">Guided · confirm movements yourself</option></select></label>}
       <label>Body side<select disabled={running} value={side} onChange={(e) => { reset(true); setSide(e.target.value) }}><option value="left">Left</option><option value="right">Right</option></select></label>
       {exercise.id === 'elbow-wrist' && <label>Movement<select value={part} disabled={running} onChange={(e) => { reset(true); setPart(e.target.value) }}><option value="elbow">Elbow · automatic reps</option><option value="wrist">Wrist · guided reps</option></select></label>}
       {kind !== 'timed' && <label>Reps<input type="number" min="1" max="50" value={goal} disabled={running} onChange={(e) => { reset(); setGoal(Math.max(1, Math.min(50, Number(e.target.value) || 1))) }} /></label>}
@@ -264,7 +309,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     {message && <p role="status">{message}</p>}
     <div className="coach-cue" role="status"><span>COACH</span><strong>{cue}</strong>{kind === 'auto' && first !== null && second !== null && <p>Start: {Math.round(first)}° → Move: {Math.round(second)}° → Hold {hold}s → Return: {Math.round(first)}°. One complete cycle counts as one rep.</p>}</div>
     <div className="movement-stats">
-      {config.metric && part !== 'wrist' && <div><span>{config.metric} · estimated 2D</span><strong>{reading.value === null ? '—' : `${Math.round(reading.value)}°`}</strong></div>}
+      {config.metric && kind !== 'guided' && <div><span>{config.metric} · estimated 2D</span><strong>{reading.value === null ? '—' : `${Math.round(reading.value)}°`}</strong></div>}
       <div><span>{kind === 'timed' ? 'Visible time / goal' : 'Reps / goal'}</span><strong>{kind === 'timed' ? `${heldSeconds} / ${duration}s` : `${coach.reps} / ${goal}`}</strong></div>
       <div><span>Tracked session time</span><strong>{seconds}s</strong></div>
     </div>
@@ -272,17 +317,7 @@ export default function ExerciseSession({ exercise, poseSampleRef, cameraOn, onC
     <div className="controls">
       <button className="primary" disabled={running || finished || !canStart} onClick={startCoaching}>Start / Resume Coaching</button>
       <button className="secondary" disabled={!running} onClick={() => { setRunning(false); coachRef.current = { ...coachRef.current, phase: 'start', since: null }; setCoach(coachRef.current); window.speechSynthesis?.cancel() }}>Pause</button>
-      {kind === 'guided' && <button className="secondary" disabled={!running || !reading.visible} onClick={() => {
-        if (coachRef.current.phase === 'hold') return
-        if (coachRef.current.phase !== 'back') {
-          coachRef.current = { ...coachRef.current, phase: 'hold', since: performance.now() }
-          setCoach(coachRef.current)
-          return
-        }
-        const next = { phase: 'start', since: null, reps: coachRef.current.reps + 1 }
-        coachRef.current = next; setCoach(next)
-        if (next.reps >= goal) { setRunning(false); setFinished(true) }
-      }}>{coach.phase === 'hold' ? 'Hold…' : coach.phase === 'back' ? 'I returned — complete rep' : 'I reached my approved position'}</button>}
+      {kind === 'guided' && <button className="secondary" disabled={!running || !reading.visible || coach.phase === 'hold'} onClick={confirmGuidedRep}>{coach.phase === 'hold' ? 'Hold…' : coach.phase === 'back' ? 'I returned — complete rep' : 'I reached my approved position'}</button>}
       <button className="primary" onClick={reviewResults}>Finish &amp; Review Results</button>
       <button className="secondary" onClick={() => reset()}>Reset Session</button>
     </div>
