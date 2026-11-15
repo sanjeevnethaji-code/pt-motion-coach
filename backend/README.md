@@ -21,3 +21,7 @@ Saved session history is local to the browser and limited to 20 records. Previou
 The browser filters angle spikes, rejects ambiguous projected geometry, and records stable start/hold/return endpoints. Flagged reps are excluded from descriptive excursion statistics and comparisons. Thresholds are prototype signal-processing heuristics, not medical limits. Unflagged measurements are not clinically validated.
 
 Run offline backend tests from the repository root: `python3 backend/tests/test_quality_lambda.py`. These use a simulated model response; they do not validate live AWS permissions, model behavior, or clinical accuracy.
+
+
+## Review version 4
+Replace the complete Lambda source with lambda_function.py and Deploy. The frontend requires review_version 4. Bedrock returns a JSON ordering of supplied evidence IDs; invalid selections fail with an actionable error. All displayed facts use server-verified templates. This avoids treating clean completed-rep flags as proof that the whole session had no tracking events.

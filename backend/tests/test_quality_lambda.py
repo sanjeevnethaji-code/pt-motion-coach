@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 fake = types.ModuleType('boto3')
-fake.client = lambda *a, **k: types.SimpleNamespace(converse=lambda **kwargs: {'output': {'message': {'content': [{'text': 'Tracking issues limit interpretation. Verify the camera setup.'}]}}})
+fake.client = lambda *a, **k: types.SimpleNamespace(converse=lambda **kwargs: {'output': {'message': {'content': [{'text': json.dumps({'order': ['tracking', 'rep_quality', 'completion', 'excursion', 'hold']})}]}}})
 sys.modules['boto3'] = fake
 sys.modules['botocore'] = types.ModuleType('botocore')
 config = types.ModuleType('botocore.config'); config.Config = lambda **k: k; sys.modules['botocore.config'] = config
@@ -56,10 +56,20 @@ class QualityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ns['validate_session'](dict(BASE,measurement_method='manual confirmation',rep_details=[ROW]))
 
+    def test_whole_session_events_cannot_be_denied_by_clean_reps(self):
+        session=ns['validate_session'](dict(BASE,rep_details=[ROW],tracking_interruptions=2,rejected_angle_samples=2))
+        evidence=ns['evidence_for'](session)
+        candidates=ns['grounded_candidates'](session,evidence)
+        text=ns['render_grounded_review'](session,evidence,list(reversed(candidates)),candidates)
+        self.assertIn('2 tracking interruption(s) and 2 rejected angle sample(s)',text)
+        self.assertIn('1 have no detected tracking flags',text)
+        self.assertIn('Movement difficulty was not reported',text)
+        self.assertNotIn('not observed',text)
+
     def test_quality_aware_response_and_missing_data(self):
         response=ns['lambda_handler'](dict(BASE,rep_details=[ROW]),None)
         self.assertEqual(response['statusCode'],200)
-        self.assertEqual(json.loads(response['body'])['review_version'],3)
+        self.assertEqual(json.loads(response['body'])['review_version'],4)
         empty=ns['evidence_for'](ns['validate_session'](BASE))
         self.assertTrue(empty['quality_warnings'])
         self.assertEqual(ns['lambda_handler']({'httpMethod':'OPTIONS'},None)['statusCode'],200)

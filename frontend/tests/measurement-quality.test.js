@@ -80,6 +80,6 @@ test('storage failures are tolerated and history remains capped', () => {
 
 test('old AWS review code cannot be mistaken for the quality-aware review', async () => {
   await assert.rejects(requestSessionSummary(session([row]), undefined, async () => ({ ok: true, json: async () => ({ summary: 'Old review', review_version: 2 }) })), /earlier review/)
-  const data = await requestSessionSummary(session([row]), undefined, async (_, options) => { assert.equal(JSON.parse(options.body).review_version, 3); return {ok: true,json: async () => ({summary: 'Checked evidence',review_version: 3})} })
-  assert.equal(data.review_version, 3)
+  const data = await requestSessionSummary(session([row]), undefined, async (_, options) => { assert.equal(JSON.parse(options.body).review_version, 4); return {ok: true,json: async () => ({summary: 'Checked evidence',review_version: 4})} })
+  assert.equal(data.review_version, 4)
 })

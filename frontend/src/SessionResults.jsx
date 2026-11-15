@@ -28,6 +28,8 @@ export default function SessionResults({ result, onNext }) {
   const previous = previousComparable(history, session, profile, sessionId)
   const previousEvidence = previous ? reviewEvidence(previous.session) : null
   const comparison = previous && sameSetup ? {
+    quality_version: previous.session.quality_version,
+    flagged_reps: previousEvidence.excluded_reps,
     completed_reps: previous.session.completed_reps,
     planned_reps: previous.session.planned_reps,
     duration_seconds: previous.session.duration_seconds,
@@ -97,17 +99,16 @@ export default function SessionResults({ result, onNext }) {
       <h3>What was actually measured</h3>
       {evidence.measured_reps > 0 ? <>
         <p>{evidence.measured_reps} completed reps have per-rep measurements. {evidence.included_reps > 0 ? <>Among reps without detected tracking flags, observed excursion ranged from <strong>{evidence.min_excursion}° to {evidence.max_excursion}°</strong>.</> : 'All measured reps are flagged; no excursion statistics or comparisons will be interpreted.'} This is change between stable camera-estimated positions, not a clinical range-of-motion test.</p>
+        <div className="excursion-chart" aria-label="Observed excursion by completed rep">{session.rep_details.map(row => <div key={row.rep}><span>Rep {row.rep}</span><div className="chart-track"><i className={repQuality(row,session).length ? 'flagged' : ''} style={{width: `${Math.max(1, row.excursion_degrees / Math.max(...session.rep_details.map(r => r.excursion_degrees),1) * 100)}%`}} /></div><strong>{row.excursion_degrees}°</strong></div>)}<p className="privacy">Relative camera-estimated excursion · bars scale to this session’s largest observation, not a clinical target.</p></div>
         <div className="table-scroll"><table><thead><tr><th>Rep</th><th>Start → held angle</th><th>Excursion</th><th>Completed hold</th><th>Cycle time</th><th>Measurement check</th></tr></thead><tbody>
           {session.rep_details.map((row) => <tr key={row.rep}><td>{row.rep}</td><td>{row.start_angle ?? '—'}° → {row.held_angle ?? '—'}°</td><td>{row.excursion_degrees}°</td><td>{row.hold_seconds === null ? 'Not recorded' : row.hold_seconds + 's'}</td><td>{row.cycle_seconds}s</td><td>{repQuality(row, session).length ? <span className="quality-flag">Flagged — excluded</span> : <span>No detected flags</span>}</td></tr>)}
         </tbody></table></div>
         <p className="privacy">Cycle time can include brief tracking gaps. Position holds must finish while tracked. Incomplete reps are not included in this table.</p>
       </> : <p>{timed ? 'Visibility-assisted timing only. The app did not measure movement quality.' : session.measurement_method === 'manual confirmation' ? 'Reps were confirmed manually. Joint excursion and hold measurements are not available.' : 'No completed rep measurements were recorded. The review will state that evidence is missing.'}</p>}
     </section>
-    <section className="review-feedback"><h3>What made this session difficult?</h3>
-      <div className="coach-settings">
-        <label>Why did you finish?<select disabled={state === 'loading'} value={reason} onChange={(e) => { setReason(e.target.value); changed() }}>{Object.entries(REASONS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label>How did the movement feel?<select disabled={state === 'loading'} value={difficulty} onChange={(e) => { setDifficulty(e.target.value); changed() }}><option value="not_answered">Not answered</option><option value="easy">Easy</option><option value="manageable">Manageable</option><option value="difficult">Difficult</option></select></label>
-      </div>
+    <section className="review-feedback"><h3>Add your perspective</h3>
+      <fieldset className="feedback-options" disabled={state === 'loading'}><legend>Why did you finish?</legend><div className="choice-chips">{Object.entries(REASONS).map(([key,label]) => <button type="button" key={key} aria-pressed={reason === key} onClick={() => { setReason(key); changed() }}>{label}</button>)}</div></fieldset>
+      <fieldset className="feedback-options" disabled={state === 'loading'}><legend>How did the movement feel?</legend><div className="choice-chips">{Object.entries({not_answered:'Not answered',easy:'Easy',manageable:'Manageable',difficult:'Difficult'}).map(([key,label]) => <button type="button" key={key} aria-pressed={difficulty === key} onClick={() => { setDifficulty(key); changed() }}>{label}</button>)}</div></fieldset>
       <p className="privacy">Optional self-report. The camera cannot determine pain, fatigue, or why you stopped.</p>
     </section>
     <section className="review-history"><h3>Compare with a saved session</h3>
@@ -128,7 +129,7 @@ export default function SessionResults({ result, onNext }) {
       {summary && <div className="summary-output" aria-live="polite">{summary.split('\n').filter((line) => line.trim()).map((line, index) => {
         const plain = line.replace(/^#{1,6}\s*/, '').replace(/\*\*/g, '')
         return /^\*\*[^*]+\*\*\s*$/.test(line.trim()) || /^#{1,6}\s/.test(line) ? <h4 key={index}>{plain}</h4> : <p key={index}>{plain}</p>
-      })}<p className="privacy">AI-generated interpretation. Check numbers against the evidence table. It does not diagnose, verify safe form, or prescribe a recovery plan.</p></div>}
+      })}<p className="privacy">AI-prioritized review with verified evidence wording. Check it against the evidence table. It does not diagnose, verify safe form, or prescribe a recovery plan.</p></div>}
     </section>
     <div className="controls"><button className="secondary" onClick={download}>Download session handoff</button><button className="secondary" onClick={onNext}>Choose another exercise →</button></div>
   </section>

@@ -268,7 +268,7 @@ function App() {
       : moves[0]
   }
   const titles = {
-    welcome: 'Welcome to PT Form Coach', surgery: 'Choose your surgery',
+    welcome: 'Small movements. Clearer insights.', surgery: 'Choose your surgery',
     exercise: 'Choose your exercise', ready: 'Ready to begin?',
     camera: selectedExercise?.name ?? 'Shoulder tracking demo',
     results: 'Your session results',
@@ -276,7 +276,11 @@ function App() {
 
   return (
     <main className={`app ${screen === 'camera' ? 'camera-screen' : ''}`}>
-      <div className="brand-row"><span className="brand-mark">PT</span> PT Form Coach</div>
+      <div className="app-topbar"><div className="brand-row"><span className="brand-mark" aria-hidden="true">↗</span><span>PT Form Coach<small>YOUR MOVEMENT COMPANION</small></span></div><span className="topbar-status"><i /> Camera stays on your device</span></div>
+      {screen !== 'welcome' && <ol className="journey" aria-label="Session progress">{['Choose', 'Prepare', 'Move', 'Review'].map((label, index) => {
+        const stage = screen === 'results' ? 3 : screen === 'camera' ? 2 : screen === 'ready' ? 1 : 0
+        return <li key={label} className={index === stage ? 'current' : index < stage ? 'complete' : ''} aria-current={index === stage ? 'step' : undefined}><span>{index < stage ? '✓' : index + 1}</span>{label}</li>
+      })}</ol>}
       {screen !== 'welcome' && <nav className="screen-nav" aria-label="Session navigation">
         <button className="back-button" onClick={() => navigate(screen === 'surgery' ? 'welcome' : screen === 'exercise' ? 'surgery' : screen === 'ready' ? (shoulderDemo ? 'surgery' : 'exercise') : screen === 'results' ? 'exercise' : 'ready')}>← Back</button>
         <span>{surgery?.name ?? (shoulderDemo ? 'General demo' : 'Your session')}{selectedExercise ? ` / ${selectedExercise.name}` : ''}</span>
@@ -284,10 +288,14 @@ function App() {
       <header><p className="eyebrow">YOUR MOVEMENT SPACE</p><h1>{titles[screen]}</h1></header>
 
       {screen === 'welcome' && <section className="welcome-panel camera-card">
-        <span className="welcome-symbol" aria-hidden="true">↗</span>
-        <p className="welcome-copy">A simple space for your exercise session.</p>
-        <p className="intro">Choose your surgery, pick an exercise, and open the camera when you’re ready.</p>
-        <button className="primary next-button" onClick={() => navigate('surgery')}>Next →</button>
+        <div className="welcome-content"><span className="badge">MOVEMENT · MEASUREMENT · UNDERSTANDING</span>
+        <p className="welcome-copy">Your movement, brought into focus.</p>
+        <p className="intro">Follow exercise guidance, see experimental camera measurements, and turn your session into a clearer conversation with your therapist.</p>
+        <button className="primary next-button" onClick={() => navigate('surgery')}>Explore your exercises <span>↗</span></button>
+        <p className="privacy">No wearable needed. No video uploads. You control when the camera opens.</p></div>
+        <div className="movement-art" aria-hidden="true"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><svg viewBox="0 0 400 360" fill="none"><path d="M58 300H350" stroke="currentColor" opacity=".15"/><circle cx="218" cy="65" r="24" fill="currentColor"/><path d="M206 105L178 180L240 222L270 297M179 180L120 232L90 297M202 117L267 153L319 102M199 119L135 140L109 94" stroke="currentColor" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"/><path d="M264 151L318 197" stroke="#dcad61" strokeWidth="5" strokeDasharray="5 10" strokeLinecap="round"/><circle cx="266" cy="153" r="10" fill="#c5f0d8"/><circle cx="178" cy="180" r="9" fill="#c5f0d8"/><circle cx="240" cy="222" r="9" fill="#c5f0d8"/><path d="M284 136A33 33 0 0 1 291 174" stroke="#dcad61" strokeWidth="2"/></svg><div className="art-caption"><span className="signal-dot" /> Designed around your next step</div></div>
+      </section>}
+      {screen === 'welcome' && <section className="feature-row" aria-label="How it works">{[['01', 'Choose your movement', 'Six exercises across two surgery categories, with video guidance.'], ['02', 'See your session', 'Live cues, personal reference positions, and visible tracking limits.'], ['03', 'Bring useful evidence', 'AWS helps prioritize verified observations for a therapist handoff.']].map(([n,title,copy]) => <article key={n}><span>{n}</span><h2>{title}</h2><p>{copy}</p></article>)}
       </section>}
 
       {screen === 'surgery' && <section aria-label="Surgery options">
@@ -307,7 +315,7 @@ function App() {
         <div className="exercise-choice-grid">
           {surgery.exercises.map((item, index) => <button key={item.id} className="choice-card" onClick={() => {
             setExerciseId(item.id); exerciseRef.current = item.id; resetSession(); navigate('ready')
-          }}><span className="choice-number">0{index + 1}</span><strong>{item.name}</strong><span>Guided coaching →</span></button>)}
+          }}><span className="choice-number">0{index + 1}</span><strong>{item.name}</strong><span className="exercise-mode">{['heel-slides', 'ankle-pumps', 'elbow-wrist'].includes(item.id) ? 'Camera estimates + guided cues' : 'Guided timing / confirmation'} <b>↗</b></span></button>)}
         </div>
       </section>}
 
@@ -420,6 +428,7 @@ function App() {
         {screen === 'camera' && selectedExercise && <details className="advanced-session"><summary>Exercise settings, voice, and manual confirmation</summary><ExerciseSession key={selectedExercise.id} exercise={selectedExercise} poseSampleRef={poseSampleRef} cameraOn={status === 'on'} onCoachUpdate={updateCoach} actionsRef={coachActionsRef} onReview={reviewSession} /></details>}
         {selectedExercise && <button className="primary next-button" onClick={() => navigate('exercise')}>Next exercise →</button>}
       </section>
+      <footer className="app-footer"><span>PT Form Coach</span><span>Experimental movement insights · Built with AWS</span></footer>
     </main>
   )
 }

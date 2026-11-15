@@ -64,7 +64,7 @@ Saved sessions are local to this browser, capped at 20, and separated by user-en
 
 The AI review receives exercise measurements, selected feedback, and an optional compatible previous session. Profile labels, camera images, and video are not included. Missing information stays unknown. Generated text must be checked against displayed evidence.
 
-FREE-WILi integration is not implemented in this repository.
+This project uses webcam tracking and AWS. No wearable hardware is required.
 
 ## AI tools used
 
@@ -81,3 +81,7 @@ List every additional tool actually used in the final Shipyard submission. Judge
 - Lincoln Surgical Hospital: https://lincolnsurgery.com/patient-information/rehabilitation/
 
 Videos are embedded or linked from their original providers; internet and provider playback availability are required.
+
+
+### Verified evidence review (v4)
+Amazon Bedrock prioritizes candidate observations. The server validates the returned IDs and renders their wording from measured evidence. Unvalidated model prose is never displayed. Whole-session interruptions and rejected samples are always reported separately from completed-rep flags. Missing self-report stays unknown. Update Lambda alongside the frontend; old review responses are rejected.
